@@ -1,0 +1,91 @@
+{
+  "expo": {
+    "name": "Sherehe",
+    "slug": "sherehe",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "rork-app",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.rork.sherehe",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "SHEREHE uses the camera so hosts can scan guest QR passes at the door and guests can capture event photos.",
+        "NSPhotoLibraryUsageDescription": "SHEREHE needs photo library access so you can pick a cover image for your event invitation.",
+        "NSPhotoLibraryAddUsageDescription": "SHEREHE saves event photos and shared gallery downloads to your library.",
+        "NSUserNotificationsUsageDescription": "SHEREHE sends RSVP reminders, event countdowns and gallery-unlock alerts."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "app.rork.ksumdxxeaoluibrtffh9i",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.VIBRATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://rork.com/"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser",
+      "expo-localization",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "SHEREHE uses the camera so hosts can scan guest QR passes at the door and guests can capture event photos."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SHEREHE needs photo library access so you can pick a cover image for your event invitation."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#FFD166"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": "https://rork.com/"
+      },
+      "eas": {
+        "projectId": "318519ee-2cbd-44c5-b120-8b6f7db66f5f"
+      }
+    },
+    "owner": "kileleni6s-organization-102"
+  }
+}
