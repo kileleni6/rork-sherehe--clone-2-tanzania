@@ -8,32 +8,11 @@ import { Alert, Animated, Easing, Linking, Platform, Pressable, StyleSheet, Text
 import { OnboardShell } from "@/components/OnboardShell";
 import { PrimaryButton } from "@/components/ui";
 import { C } from "@/constants/colors";
+import { EVENT_TIERS as TIERS, type TierId } from "@/constants/plans";
+import { configurePurchases, getOfferingPrices, type OfferingPriceMap } from "@/lib/purchases";
 import { useEvents } from "@/providers/EventsProvider";
 import { useOnboarding } from "@/providers/OnboardingProvider";
 
-
-type TierId = "starter" | "celebration" | "premium" | "large" | "enterprise" | "super";
-
-interface Tier {
-  id: TierId;
-  name: string;
-  blurb: string;
-  price: string;
-  per: string;
-  guests: string;
-  storage: string;
-  highlight?: boolean;
-  free?: boolean;
-}
-
-const TIERS: Tier[] = [
-  { id: "starter", name: "Starter", blurb: "Up to 5 guests", price: "Free", per: "forever", guests: "5 guests", storage: "1 GB", free: true },
-  { id: "celebration", name: "Celebration", blurb: "Up to 100 guests", price: "$24.99", per: "one-time", guests: "100 guests", storage: "25 GB", highlight: true },
-  { id: "premium", name: "Premium Event", blurb: "Up to 250 guests", price: "$89.99", per: "one-time", guests: "250 guests", storage: "75 GB" },
-  { id: "large", name: "Large Event", blurb: "Up to 500 guests", price: "$149.99", per: "one-time", guests: "500 guests", storage: "150 GB" },
-  { id: "enterprise", name: "Enterprise Event", blurb: "Up to 1,000 guests", price: "$299.99", per: "one-time", guests: "1,000 guests", storage: "500 GB" },
-  { id: "super", name: "Super Event", blurb: "Up to 2,000 guests", price: "$499.99", per: "one-time", guests: "2,000 guests", storage: "Unlimited" },
-];
 
 const PERKS = [
   "All 50+ premium invitation templates",
@@ -57,12 +36,27 @@ export default function OnboardingPaywallScreen() {
   }, [guestTier]);
 
   const [tier, setTier] = useState<TierId>(initialTier);
+  const [storePrices, setStorePrices] = useState<OfferingPriceMap>({});
 
   const shine = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.loop(
+    const animation = Animated.loop(
       Animated.timing(shine, { toValue: 1, duration: 2800, easing: Easing.inOut(Easing.ease), useNativeDriver: true })
-    ).start();
+    );
+    animation.start();
+
+    let isMounted = true;
+    configurePurchases()
+      .then(() => getOfferingPrices())
+      .then((prices) => {
+        if (isMounted) setStorePrices(prices);
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+      animation.stop();
+    };
   }, [shine]);
   const shimmer = shine.interpolate({ inputRange: [0, 1], outputRange: [-200, 260] });
 
@@ -92,9 +86,12 @@ export default function OnboardingPaywallScreen() {
     }
     router.push("/onboarding/auth" as never);
   };
+  const selectedPrice = selected?.rcPackage
+    ? storePrices[selected.rcPackage] ?? selected.price
+    : selected?.price ?? "";
   const ctaTitle = selected?.free
     ? t("paywall_cta_start_free", { name: selected.name })
-    : t("paywall_cta_unlock", { name: selected?.name ?? "", price: selected?.price ?? "" });
+    : t("paywall_cta_unlock", { name: selected?.name ?? "", price: selectedPrice });
 
   const enterpriseCTA = () => {
     if (Platform.OS !== "web") Haptics.selectionAsync().catch(() => {});
@@ -202,7 +199,9 @@ export default function OnboardingPaywallScreen() {
                 </View>
               </View>
               <View style={{ alignItems: "flex-end" }}>
-                <Text style={[styles.tierPrice, tr.free ? { color: C.gold } : null]}>{tr.price}</Text>
+                <Text style={[styles.tierPrice, tr.free ? { color: C.gold } : null]}>
+                  {tr.rcPackage ? storePrices[tr.rcPackage] ?? tr.price : tr.price}
+                </Text>
                 <Text style={styles.tierPer}>{per}</Text>
                 <View style={[styles.radio, active ? styles.radioOn : null]}>
                   {active ? <Check color={C.text} size={14} /> : null}
@@ -257,7 +256,7 @@ export default function OnboardingPaywallScreen() {
       </View>
 
       <Text style={styles.legal}>
-        Pay with Apple Pay, Google Pay or card via Stripe. Cancel anytime — it's a one-time per event.
+        One-time event purchase. In-app payments are processed securely by Apple or Google; web checkout is available on plan details where supported.
       </Text>
     </OnboardShell>
   );

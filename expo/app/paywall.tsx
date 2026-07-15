@@ -8,39 +8,14 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { PressableScale } from "@/components/pressable/PressableScale";
 import { FadeInView, GhostButton, IconButton, PrimaryButton } from "@/components/ui";
 import { C } from "@/constants/colors";
+import { EVENT_TIERS, type Tier, type TierId } from "@/constants/plans";
 import { triggerHaptic } from "@/lib/haptics";
-import { configurePurchases, isPurchasesAvailable, restorePurchases } from "@/lib/purchases";
+import { configurePurchases, getOfferingPrices, isPurchasesAvailable, restorePurchases, type OfferingPriceMap } from "@/lib/purchases";
 import { useEvents } from "@/providers/EventsProvider";
 import { useOnboarding } from "@/providers/OnboardingProvider";
 
-type TierId = "starter" | "celebration" | "premium" | "large" | "enterprise" | "super";
-
-interface Tier {
-  id: TierId;
-  name: string;
-  blurb: string;
-  price: string;
-  per: "free" | "one_time";
-  guests: string;
-  storage: string;
-  /** RevenueCat package lookup_key (offering "default") */
-  rcPackage?: "celebration" | "premium" | "large" | "enterprise" | "super";
-  /** RevenueCat product store identifier */
-  rcProductId?: string;
-  highlight?: boolean;
-  free?: boolean;
-}
-
-export const TIERS: Tier[] = [
-  { id: "starter",     name: "Starter",          blurb: "Up to 5 guests",       price: "Free",      per: "free",     guests: "5 guests",       storage: "1 GB",       free: true },
-  { id: "celebration", name: "Celebration",      blurb: "Up to 100 guests",     price: "$24.99",    per: "one_time", guests: "100 guests",     storage: "25 GB",      highlight: true, rcPackage: "celebration", rcProductId: "sherehe_celebration" },
-  { id: "premium",     name: "Premium Event",    blurb: "Up to 250 guests",     price: "$89.99",    per: "one_time", guests: "250 guests",     storage: "75 GB",                       rcPackage: "premium",     rcProductId: "sherehe_premium" },
-  { id: "large",       name: "Large Event",      blurb: "Up to 500 guests",     price: "$149.99",   per: "one_time", guests: "500 guests",     storage: "150 GB",                      rcPackage: "large",       rcProductId: "sherehe_large" },
-  { id: "enterprise",  name: "Enterprise Event", blurb: "Up to 1,000 guests",   price: "$299.99",   per: "one_time", guests: "1,000 guests",   storage: "500 GB",                      rcPackage: "enterprise",  rcProductId: "sherehe_enterprise" },
-  { id: "super",       name: "Super Event",      blurb: "Up to 2,000 guests",   price: "$499.99",   per: "one_time", guests: "2,000 guests",   storage: "Unlimited",                   rcPackage: "super",       rcProductId: "sherehe_super" },
-];
-
-export type { TierId, Tier };
+export const TIERS: Tier[] = EVENT_TIERS;
+export type { TierId, Tier } from "@/constants/plans";
 
 export default function PaywallScreen() {
   const router = useRouter();
@@ -49,8 +24,18 @@ export default function PaywallScreen() {
   const { t } = useOnboarding();
   const [tier, setTier] = useState<TierId>("celebration");
   const [restoring, setRestoring] = useState<boolean>(false);
+  const [storePrices, setStorePrices] = useState<OfferingPriceMap>({});
   useEffect(() => {
-    configurePurchases().catch(() => {});
+    let isMounted = true;
+    configurePurchases()
+      .then(() => getOfferingPrices())
+      .then((prices) => {
+        if (isMounted) setStorePrices(prices);
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const selected = useMemo(() => TIERS.find((x) => x.id === tier), [tier]);
@@ -124,9 +109,12 @@ export default function PaywallScreen() {
     }
   };
 
+  const selectedPrice = selected?.rcPackage
+    ? storePrices[selected.rcPackage] ?? selected.price
+    : selected?.price ?? "";
   const ctaTitle = selected?.free
     ? t("paywall_cta_start_free", { name: selected.name })
-    : t("paywall_cta_unlock", { name: selected?.name ?? "", price: selected?.price ?? "" });
+    : t("paywall_cta_unlock", { name: selected?.name ?? "", price: selectedPrice });
 
   const perLabel = (per: Tier["per"]) =>
     per === "free" ? t("paywall_free_forever") : t("paywall_one_time");
@@ -186,7 +174,9 @@ export default function PaywallScreen() {
                     </View>
                   </View>
                   <View style={{ alignItems: "flex-end" }}>
-                    <Text style={[ps.tierPrice, tr.free ? { color: C.gold } : null]}>{tr.price}</Text>
+                    <Text style={[ps.tierPrice, tr.free ? { color: C.gold } : null]}>
+                      {tr.rcPackage ? storePrices[tr.rcPackage] ?? tr.price : tr.price}
+                    </Text>
                     <Text style={ps.tierPer}>{perLabel(tr.per)}</Text>
                     <View style={[ps.radio, active ? ps.radioOn : null]}>
                       {active ? <Check color={C.text} size={14} /> : null}

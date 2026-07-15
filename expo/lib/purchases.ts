@@ -17,6 +17,7 @@ import { Platform } from "react-native";
  */
 
 export type PurchaseResult = { success: boolean; mocked: boolean; productId?: string; error?: string };
+export type OfferingPriceMap = Record<string, string>;
 
 const isExpoGo = Constants.executionEnvironment === "storeClient";
 
@@ -75,6 +76,31 @@ export async function configurePurchases(userId?: string): Promise<void> {
   }
 }
 
+export async function getOfferingPrices(): Promise<OfferingPriceMap> {
+  const Purchases = loadPurchases();
+  if (!Purchases) return {};
+
+  try {
+    await configurePurchases();
+    const offerings = await Purchases.getOfferings();
+    const current = offerings.current ?? Object.values(offerings.all)[0];
+    if (!current) return {};
+
+    return current.availablePackages.reduce<OfferingPriceMap>((prices, pkg) => {
+      const localizedPrice = pkg.product?.priceString;
+      if (localizedPrice) {
+        prices[pkg.identifier] = localizedPrice;
+        if (pkg.product?.identifier) prices[pkg.product.identifier] = localizedPrice;
+      }
+      return prices;
+    }, {});
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "unknown error";
+    console.log("[purchases] offering prices unavailable", message);
+    return {};
+  }
+}
+
 export async function purchasePackageByKey(
   packageKey: string,
   productId?: string,
@@ -103,8 +129,12 @@ export async function purchasePackageByKey(
     }
 
     const result = await Purchases.purchasePackage(pkg);
-    const entitled = !!result?.customerInfo?.entitlements?.active?.pro;
-    return { success: entitled, mocked: false, productId };
+    const purchasedProductId = result?.productIdentifier ?? pkg.product?.identifier ?? productId;
+    // Event plans are consumable, one-time purchases. Consumables do not remain
+    // restorable entitlements, so a completed StoreKit/Play transaction is the
+    // source of truth for this purchase rather than an active `pro` entitlement.
+    const completed = Boolean(result?.customerInfo || result?.transaction);
+    return { success: completed, mocked: false, productId: purchasedProductId };
   } catch (e: unknown) {
     const err = e as { userCancelled?: boolean; message?: string };
     if (err?.userCancelled) {

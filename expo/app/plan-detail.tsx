@@ -6,6 +6,7 @@ import {
   Check,
   ChevronRight,
   Crown,
+  ExternalLink,
   HardDrive,
   MessageSquareText,
   Palette,
@@ -14,10 +15,11 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -29,16 +31,19 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { PrimaryButton } from "@/components/ui";
 import { C } from "@/constants/colors";
-import { purchasePackageByKey } from "@/lib/purchases";
+import { EVENT_TIERS, type TierId } from "@/constants/plans";
+import { configurePurchases, getOfferingPrices, purchasePackageByKey, type OfferingPriceMap } from "@/lib/purchases";
 import { useEvents } from "@/providers/EventsProvider";
 import { useOnboarding } from "@/providers/OnboardingProvider";
-import { TIERS, type TierId } from "./paywall";
 
 interface PlanFeature {
   icon: React.ReactNode;
   label: string;
   description: string;
 }
+
+const WEB_CHECKOUT_URL = process.env.EXPO_PUBLIC_SHEREHE_WEB_CHECKOUT_URL?.trim() ?? "";
+const IOS_WEB_CHECKOUT_ENABLED = process.env.EXPO_PUBLIC_ENABLE_IOS_WEB_CHECKOUT === "true";
 
 const ALL_FEATURES: PlanFeature[] = [
   {
@@ -80,8 +85,22 @@ export default function PlanDetailScreen() {
   const { setProfile } = useEvents();
   const { t } = useOnboarding();
   const [purchasing, setPurchasing] = useState<boolean>(false);
+  const [storePrices, setStorePrices] = useState<OfferingPriceMap>({});
 
-  const tier = TIERS.find((tr) => tr.id === (tierId as TierId));
+  const tier = EVENT_TIERS.find((tr) => tr.id === (tierId as TierId));
+
+  useEffect(() => {
+    let isMounted = true;
+    configurePurchases()
+      .then(() => getOfferingPrices())
+      .then((prices) => {
+        if (isMounted) setStorePrices(prices);
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   if (!tier) {
     return (
@@ -98,6 +117,29 @@ export default function PlanDetailScreen() {
   }
 
   const isFree = tier.free === true;
+  const displayPrice = tier.rcPackage ? storePrices[tier.rcPackage] ?? tier.price : tier.price;
+  const canOfferWebCheckout = Platform.OS !== "ios" || IOS_WEB_CHECKOUT_ENABLED;
+
+  const openWebCheckout = async () => {
+    if (!WEB_CHECKOUT_URL) {
+      Alert.alert(
+        "Web checkout not configured",
+        "Connect Stripe to RevenueCat Billing, create a Web Purchase Link, then add it as EXPO_PUBLIC_SHEREHE_WEB_CHECKOUT_URL.",
+      );
+      return;
+    }
+
+    try {
+      const checkoutUrl = new URL(WEB_CHECKOUT_URL);
+      if (checkoutUrl.protocol !== "https:") throw new Error("Checkout must use HTTPS");
+      checkoutUrl.searchParams.set("plan", tier.id);
+      checkoutUrl.searchParams.set("source", Platform.OS);
+      await Linking.openURL(checkoutUrl.toString());
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Please try again.";
+      Alert.alert("Unable to open web checkout", message);
+    }
+  };
 
   const handlePurchase = async () => {
     if (isFree) {
@@ -155,7 +197,7 @@ export default function PlanDetailScreen() {
         </View>
 
         <ScrollView
-          contentContainerStyle={{ padding: 18, paddingBottom: 160 }}
+          contentContainerStyle={{ padding: 18, paddingBottom: isFree || !canOfferWebCheckout ? 160 : 245 }}
           showsVerticalScrollIndicator={false}
         >
           {/* ── Hero: Plan Name + Price ── */}
@@ -169,7 +211,7 @@ export default function PlanDetailScreen() {
             <Text style={s.planName}>{tier.name}</Text>
             <Text style={s.planBlurb}>{tier.blurb}</Text>
             <View style={s.priceRow}>
-              <Text style={s.price}>{tier.price}</Text>
+              <Text style={s.price}>{displayPrice}</Text>
               <Text style={s.priceLabel}>
                 {isFree ? t("paywall_free_forever") : t("paywall_one_time")}
               </Text>
@@ -236,7 +278,7 @@ export default function PlanDetailScreen() {
                 <Text style={s.howNumText}>2</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={s.howStepTitle}>Confirm via {Platform.OS === "ios" ? "Apple" : "Google"} Pay</Text>
+                <Text style={s.howStepTitle}>Confirm with {Platform.OS === "ios" ? "Apple" : "Google Play"}</Text>
                 <Text style={s.howStepBody}>
                   You'll see a final confirmation on the next screen. Nothing is charged until you approve.
                 </Text>
@@ -280,12 +322,31 @@ export default function PlanDetailScreen() {
                 ? t("paywall_processing")
                 : isFree
                 ? "Get Started — Free"
-                : `Pay ${tier.price} — One Time`
+                : `Pay ${displayPrice} in app — One Time`
             }
             icon={isFree ? Sparkles : Crown}
             onPress={handlePurchase}
             disabled={purchasing}
           />
+          {!isFree && canOfferWebCheckout ? (
+            <>
+              <View style={s.orRow}>
+                <View style={s.orLine} />
+                <Text style={s.orText}>OR</Text>
+                <View style={s.orLine} />
+              </View>
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel="Pay securely on the web"
+                onPress={openWebCheckout}
+                disabled={purchasing}
+                style={({ pressed }) => [s.webButton, pressed ? s.webButtonPressed : null]}
+              >
+                <ExternalLink color={C.text} size={18} />
+                <Text style={s.webButtonText}>Pay securely on the web</Text>
+              </Pressable>
+            </>
+          ) : null}
           <Pressable onPress={() => router.back()} hitSlop={8} style={s.backToPlans}>
             <ChevronRight
               color="rgba(255,255,255,0.5)"
@@ -464,6 +525,22 @@ const s = StyleSheet.create({
     borderTopColor: "rgba(255,255,255,0.08)",
     gap: 10,
   },
+  orRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  orLine: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.12)" },
+  orText: { color: "rgba(255,255,255,0.5)", fontSize: 10, fontWeight: "800" as const, letterSpacing: 1.5 },
+  webButton: {
+    minHeight: 50,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.24)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+  },
+  webButtonPressed: { opacity: 0.75, transform: [{ scale: 0.99 }] },
+  webButtonText: { color: C.text, fontSize: 14, fontWeight: "700" as const },
   backToPlans: {
     flexDirection: "row",
     alignItems: "center",
