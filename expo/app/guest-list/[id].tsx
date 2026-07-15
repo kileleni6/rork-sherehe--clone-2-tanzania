@@ -1,5 +1,6 @@
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
+import { useMutation as useConvexMutation } from "convex/react";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   Check,
@@ -34,6 +35,8 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PressableScale } from "@/components/pressable/PressableScale";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import {
   Card,
   Chip,
@@ -70,6 +73,7 @@ export default function GuestListScreen() {
   const insets = useSafeAreaInsets();
   const toast = useToast();
   const { findById } = useEvents();
+  const saveInvitations = useConvexMutation(api.invitations.saveMany);
   const event = findById(id);
 
   const [name, setName] = useState<string>("");
@@ -188,6 +192,15 @@ export default function GuestListScreen() {
     setFailed(0);
 
     try {
+      await saveInvitations({
+        eventId: event.id as Id<"events">,
+        guests: guests.map((guest) => ({
+          name: guest.name,
+          email: guest.email.trim() || undefined,
+          phone: guest.phone.trim() || undefined,
+        })),
+      });
+
       const dateStr = new Date(event.date).toLocaleDateString(undefined, {
         weekday: "long",
         month: "long",

@@ -2,6 +2,7 @@
 import "@/lib/abort-polyfill";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -16,6 +17,13 @@ import { OnboardingProvider, useOnboarding } from "@/providers/OnboardingProvide
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
+const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL ?? "";
+if (!convexUrl) {
+  throw new Error("EXPO_PUBLIC_CONVEX_URL is required");
+}
+const convexClient = new ConvexReactClient(convexUrl, {
+  unsavedChangesWarning: false,
+});
 
 // ---------------------------------------------------------------------------
 // Global error suppression — prevents transient network blips from surfacing
@@ -141,18 +149,20 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <OnboardingProvider>
-          <EventsProvider>
-            <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#0A0A0B" }}>
-              <StatusBar style="light" />
-              <ToastProvider>
-                <OnboardingGate>
-                  <RootLayoutNav />
-                </OnboardingGate>
-              </ToastProvider>
-            </GestureHandlerRootView>
-          </EventsProvider>
-        </OnboardingProvider>
+        <ConvexProvider client={convexClient}>
+          <OnboardingProvider>
+            <EventsProvider>
+              <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#0A0A0B" }}>
+                <StatusBar style="light" />
+                <ToastProvider>
+                  <OnboardingGate>
+                    <RootLayoutNav />
+                  </OnboardingGate>
+                </ToastProvider>
+              </GestureHandlerRootView>
+            </EventsProvider>
+          </OnboardingProvider>
+        </ConvexProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );
